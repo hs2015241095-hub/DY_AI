@@ -1,16 +1,20 @@
 {
-  "name": "TK Elevator AI",
+  "name": "TK Elevator 기술지원 AI",
   "short_name": "TK AI",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#0D1117",
-  "theme_color": "#1F6FEB",
+  "background_color": "#ffffff",
+  "theme_color": "#0A2A66",
   "icons": [
     {
-      "src": "/static/icon.png",
+      "src": "/static/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/static/icon-512.png",
       "sizes": "512x512",
       "type": "image/png"
     }
   ]
 }
-
