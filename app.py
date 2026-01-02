@@ -141,21 +141,6 @@ def load_manual_chunks():
 
 MANUAL_CHUNKS = load_manual_chunks()
 
-# ==========================================================
-# 고장이력 로딩
-# ==========================================================
-@st.cache_data(show_spinner=False)
-def load_failure_history():
-    history = []
-    if not os.path.exists("failure_history.csv"):
-        return history
-
-    with open("failure_history.csv", newline="", encoding="utf-8") as f:
-        reader = csv.DictReader(f)
-        history.extend(reader)
-    return history
-
-FAILURE_HISTORY = load_failure_history()
 
 # ==========================================================
 # 유사도
