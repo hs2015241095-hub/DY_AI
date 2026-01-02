@@ -1,9 +1,13 @@
-# 메뉴얼 (서버 전용)
-manuals/
-
-# 고장이력 (원하면 제외)
-failure_history.csv
-
-# 캐시
+# Python
 __pycache__/
-.streamlit/
+*.pyc
+
+# Virtual Environment
+venv/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local folders
+DY_AI/
