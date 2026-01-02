@@ -1,0 +1,9 @@
+# 메뉴얼 (서버 전용)
+manuals/
+
+# 고장이력 (원하면 제외)
+failure_history.csv
+
+# 캐시
+__pycache__/
+.streamlit/
