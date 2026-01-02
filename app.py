@@ -1,7 +1,7 @@
 # ==========================================================
-# TK 엘리베이터 통합 기술지원 AI
-# OCR 미사용 / 회로도 텍스트 설명 기반
-# 모바일 · Cloud 완전 대응
+# ELAI (Elevator Logic AI)
+# 메뉴얼 + 고장이력 기반 추측 강화
+# 모바일 / 앱 스타일 완전 대응
 # ==========================================================
 
 import streamlit as st
@@ -10,6 +10,48 @@ import os
 import fitz
 import re
 import math
+import csv
+from PIL import Image
+
+# ==========================================================
+# 페이지 설정
+# ==========================================================
+st.set_page_config(
+    page_title="ELAI",
+    page_icon="static/favicon.png",
+    layout="wide"
+)
+
+# ==========================================================
+# 앱 스타일 (완전 앱 느낌)
+# ==========================================================
+st.markdown("""
+<style>
+html, body, [class*="css"]  {
+    background-color: #0f1117;
+    color: #e6e6e6;
+    font-family: Pretendard, sans-serif;
+}
+input {
+    background-color: #1c1f26 !important;
+    color: white !important;
+    border-radius: 8px !important;
+}
+button {
+    background-color: #2563eb !important;
+    color: white !important;
+    border-radius: 10px !important;
+    height: 50px;
+    font-size: 18px;
+}
+button:hover {
+    background-color: #1d4ed8 !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
+# PWA
+st.markdown('<link rel="manifest" href="/static/manifest.json">', unsafe_allow_html=True)
 
 # ==========================================================
 # OpenAI
@@ -17,151 +59,154 @@ import math
 client = OpenAI()
 
 # ==========================================================
-# 메뉴얼 로딩 (PDF + TXT + MD)
+# 메뉴얼 로딩
 # ==========================================================
 @st.cache_data(show_spinner=True)
 def load_manual_chunks():
-    manuals_dir = "manuals"
     chunks = []
-
-    if not os.path.exists(manuals_dir):
+    if not os.path.exists("manuals"):
         return chunks
 
-    for file in os.listdir(manuals_dir):
-        path = os.path.join(manuals_dir, file)
+    for file in os.listdir("manuals"):
+        if not file.lower().endswith(".pdf"):
+            continue
 
-        # PDF (텍스트만)
-        if file.lower().endswith(".pdf"):
-            doc = fitz.open(path)
-            for page_no, page in enumerate(doc, start=1):
-                text = page.get_text().strip()
-                if not text:
-                    continue
+        doc = fitz.open(os.path.join("manuals", file))
+        for page_no, page in enumerate(doc, start=1):
+            text = page.get_text().strip()
+            if not text:
+                continue
 
-                paragraphs = [
-                    p.strip()
-                    for p in text.split("\n\n")
-                    if len(p.strip()) > 40
-                ]
-
-                for para in paragraphs:
+            for para in text.split("\n\n"):
+                if len(para.strip()) > 40:
                     chunks.append({
                         "file": file,
                         "page": page_no,
-                        "text": para
+                        "text": para.strip()
                     })
-
-        # TXT / MD (회로도 설명용)
-        elif file.lower().endswith((".txt", ".md")):
-            with open(path, "r", encoding="utf-8") as f:
-                content = f.read()
-
-            paragraphs = [
-                p.strip()
-                for p in content.split("\n\n")
-                if len(p.strip()) > 30
-            ]
-
-            for para in paragraphs:
-                chunks.append({
-                    "file": file,
-                    "page": "N/A",
-                    "text": para
-                })
-
     return chunks
 
 MANUAL_CHUNKS = load_manual_chunks()
 
 # ==========================================================
-# 질문 ↔ 문단 유사도
+# 고장이력 로딩 (CSV)
 # ==========================================================
-def similarity(q, t):
-    q_set = set(re.findall(r"[a-zA-Z0-9가-힣]+", q.lower()))
-    t_set = set(re.findall(r"[a-zA-Z0-9가-힣]+", t.lower()))
-    if not q_set or not t_set:
-        return 0
-    return len(q_set & t_set) / math.sqrt(len(q_set) * len(t_set))
+@st.cache_data(show_spinner=False)
+def load_failure_history():
+    history = []
+    if not os.path.exists("failure_history.csv"):
+        return history
 
-def retrieve_context(question, top_k=6):
+    with open("failure_history.csv", newline="", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            history.append(row)
+    return history
+
+FAILURE_HISTORY = load_failure_history()
+
+# ==========================================================
+# 유사도
+# ==========================================================
+def similarity(a, b):
+    a_set = set(re.findall(r"[a-zA-Z0-9가-힣]+", a.lower()))
+    b_set = set(re.findall(r"[a-zA-Z0-9가-힣]+", b.lower()))
+    if not a_set or not b_set:
+        return 0
+    return len(a_set & b_set) / math.sqrt(len(a_set) * len(b_set))
+
+def retrieve_manual_context(question):
     scored = []
     for c in MANUAL_CHUNKS:
         s = similarity(question, c["text"])
         if s > 0:
             scored.append((s, c))
     scored.sort(reverse=True, key=lambda x: x[0])
-    return [c for _, c in scored[:top_k]]
+    return [c for _, c in scored[:5]]
+
+def retrieve_failure_context(question):
+    scored = []
+    for h in FAILURE_HISTORY:
+        s = similarity(question, h.get("고장증상", ""))
+        if s > 0:
+            scored.append((s, h))
+    scored.sort(reverse=True, key=lambda x: x[0])
+    return [h for _, h in scored[:3]]
 
 # ==========================================================
 # UI
 # ==========================================================
-st.set_page_config("TK Elevator 기술지원 AI", layout="wide")
-st.title("🛠️ TK 엘리베이터 통합 기술지원 AI")
+st.title("ELAI")
 
-st.markdown("""
-✔ 메뉴얼 기반  
-✔ OCR 미사용  
-✔ 회로도 설명 텍스트 지원  
-✔ 모바일 5G/LTE 사용 가능  
-✔ 추측 금지  
-✔ 질문 범위 자동 확인
-""")
+question = st.text_input("고장증상 또는 질문을 입력하세요")
 
-question = st.text_input("고장 증상 또는 질문을 입력하세요")
+uploaded_image = st.file_uploader(
+    "회로도 이미지 첨부 (선택 / 참고용)",
+    type=["png", "jpg", "jpeg"]
+)
 
 # ==========================================================
-# 질문 처리
+# 실행
 # ==========================================================
-if st.button("질문하기") and question:
-    if not MANUAL_CHUNKS:
-        st.error("메뉴얼 데이터를 불러오지 못했습니다.")
-    else:
-        contexts = retrieve_context(question)
+if st.button("ENTER"):
 
-        if not contexts:
-            st.warning("메뉴얼 기준 확인 불가")
-        else:
-            context_text = ""
-            for c in contexts:
-                context_text += f"\n[{c['file']} - {c['page']}]\n{c['text']}\n"
+    manual_ctx = retrieve_manual_context(question)
+    failure_ctx = retrieve_failure_context(question)
 
-            response = client.responses.create(
-                model="gpt-4.1-mini",
-                input=[
-                    {
-                        "role": "system",
-                        "content": f"""
-너는 TK 엘리베이터 현장 기술지원 AI다.
+    if not manual_ctx and not failure_ctx:
+        st.warning("메뉴얼 및 고장이력 기준 확인 불가")
+        st.stop()
 
-🚨 가장 중요한 규칙 🚨
-- 질문이 광범위하거나 모호하면 즉시 설명하지 말 것
-- 아래 중 어떤 것을 의미하는지 반드시 되물어라
+    manual_text = ""
+    for c in manual_ctx:
+        manual_text += f"\n[{c['file']} - {c['page']}]\n{c['text']}\n"
 
-선택 예시:
-1. 회로 동작 설명
-2. 특정 부품 기능
-3. 고장 원인
-4. 점검 절차
-5. 파라미터/설정값
-6. 안전 관련 확인
-
-규칙:
-- 메뉴얼/회로 설명 파일에 있는 내용만 답한다
-- 추측, 일반론, 경험담 생성 금지
-- 메뉴얼에 없으면 "메뉴얼 기준 확인 불가"라고 말한다
-- 점검 절차는 단계별로 제시
-- 안전 관련 내용은 반드시 ⚠ 주의 문구 포함
-- 질문이 명확할 때만 설명을 시작한다
-
-[참조 문서]
-{context_text}
+    failure_text = ""
+    for h in failure_ctx:
+        failure_text += f"""
+- 고장증상: {h.get('고장증상')}
+- 에러코드: {h.get('에러코드')}
+- 처리내용: {h.get('처리내용')}
 """
-                    },
-                    {
-                        "role": "user",
-                        "content": question
-                    }
-                ]
-            )
 
-            st.success(response.output_text)
+    response = client.responses.create(
+        model="gpt-4.1-mini",
+        input=[
+            {
+                "role": "system",
+                "content": f"""
+너는 엘리베이터 현장 기술지원 AI다.
+
+출력 규칙:
+1. [메뉴얼 기준 설명]
+2. [고장이력 기반 AI 추측 ⚠️] (있을 때만)
+3. 책임 경고 문구 필수
+
+[메뉴얼 자료]
+{manual_text}
+
+[고장이력 자료]
+{failure_text}
+"""
+            },
+            {
+                "role": "user",
+                "content": question
+            }
+        ]
+    )
+
+    if uploaded_image:
+        st.image(Image.open(uploaded_image), caption="첨부 회로도 (참고용)", use_container_width=True)
+
+    output = response.output_text
+
+    if "[고장이력 기반 AI 추측" in output:
+        base, guess = output.split("[고장이력 기반 AI 추측")
+        st.success(base)
+        st.markdown(
+            f"<span style='color:#ff4d4f'>[고장이력 기반 AI 추측{guess}</span>",
+            unsafe_allow_html=True
+        )
+    else:
+        st.success(output)
