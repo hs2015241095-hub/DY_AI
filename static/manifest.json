@@ -1,1 +1,16 @@
+{
+  "name": "TK Elevator AI",
+  "short_name": "TK AI",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0D1117",
+  "theme_color": "#1F6FEB",
+  "icons": [
+    {
+      "src": "/static/icon.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
 
